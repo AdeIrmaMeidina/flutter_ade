@@ -1,10 +1,11 @@
 class BaseUrl {
-  static String login = 'http://10.10.11.77:8000/api/login';
-  static String register = 'http://10.10.11.77:8000/api/register';
-  static String logout = 'http://10.10.11.77:8000/api/logout';
+  static const String baseUrl = 'http://localhost:8000';
+  static String login = 'http://127.0.0.1:8000/api/login';
+  static String register = 'http://127.0.0.1:8000/api/register';
+  static String logout = 'http://127.0.0.1:8000/api/logout';
 
-  static String berita = 'http://10.10.11.77:8000/api/berita';
-  static String profile = 'http://10.10.11.77:8000/api/user';
-  static String index = 'http://10.10.11.77:8000/api/index';
-  static String berita_detail = 'http://10.10.11.77:8000/api/berita_detail';
+  static String berita = '/api/berita';
+  static String profile = '/api/user';
+  static String index = 'http://127.0.0.1:8000/api/index';
+  static String berita_detail = '/berita_detail';
 }

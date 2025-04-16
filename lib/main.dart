@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_ade/app/modules/berita/controllers/berita_controller.dart';
 
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
@@ -12,6 +13,8 @@ void main() async {
 
   if (!Get.isRegistered<ProfileController>()) {
     Get.put(ProfileController(), permanent: true);
+
+    Get.put(BeritaController());
   }
 
   runApp(MyApp());

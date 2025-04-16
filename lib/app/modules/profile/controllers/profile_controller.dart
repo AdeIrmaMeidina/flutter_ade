@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:http/http.dart' as http;
@@ -6,85 +7,118 @@ import '../../../data/profile_response.dart';
 import '../../../utils/api.dart';
 
 class ProfileController extends GetxController {
-  var isLoading = false.obs;
-  var profileData = Rxn<ProfileResponse>();
+  final box = GetStorage();
+  final _getConnect = GetConnect();
 
-  final storage = GetStorage();
+  var profile = Rxn<ProfileResponse>(); // Menggunakan Rxn untuk nullable data
+  var isLoading = false.obs;
 
   @override
   void onInit() {
     super.onInit();
-    fetchProfileData();
+    getProfile();
   }
 
-  Future<void> fetchProfileData() async {
+  /// 🔐 Mengambil token dari storage
+  Future<String?> getToken() async {
+    String? token = box.read('token') ?? box.read('auth_token');
+    debugPrint('🔑 Retrieved token: $token');
+    return token;
+  }
+
+  /// 📄 Mengambil data profil dari API
+  Future<void> getProfile() async {
     try {
       isLoading.value = true;
-      final token = await storage.read('token');
+      update();
+
+      String? token = await getToken();
+      debugPrint("🔑 Token: $token");
 
       if (token == null || token.isEmpty) {
-        Get.snackbar('Error', 'Token tidak ditemukan. Silakan login ulang.');
-        Get.offAllNamed('/login');
-        return;
+        throw Exception("⚠️ Token tidak ditemukan, silakan login ulang.");
       }
 
-      final response = await http.get(
-        Uri.parse(BaseUrl.profile),
+      final response = await _getConnect.get(
+        '${BaseUrl.baseUrl}${BaseUrl.profile}',
         headers: {
-          'Accept': 'application/json',
           'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
       );
 
-      if (response.statusCode == 200) {
-        profileData.value =
-            ProfileResponse.fromJson(json.decode(response.body));
-      } else if (response.statusCode == 401) {
-        Get.snackbar('Session Expired', 'Silakan login ulang.');
-        await logout();
-      } else {
-        Get.snackbar('Error', 'Gagal ambil profil (${response.statusCode})');
+      debugPrint("📡 Response Status: ${response.statusCode}");
+      debugPrint("📦 Response Body: ${response.body}");
+
+      if (response.status.hasError) {
+        if (response.statusCode == 401) {
+          await logout();
+          throw Exception("⚠️ Sesi berakhir, silakan login kembali.");
+        }
+        throw Exception("❌ Gagal mengambil profil: ${response.statusText}");
       }
+
+      final rawData = response.body;
+      debugPrint("📝 Data yang diterima dari API: $rawData");
+
+      if (rawData == null) {
+        throw Exception("⚠️ API mengembalikan response kosong.");
+      }
+
+      if (rawData is! Map<String, dynamic>) {
+        throw Exception(
+            "❌ Format response API salah. Harus berupa JSON Object.");
+      }
+
+      // **Sekarang langsung parsing JSON tanpa field `data`**
+      profile.value = ProfileResponse.fromJson(rawData);
+      debugPrint("✅ Profil berhasil dimuat: ${profile.value}");
     } catch (e) {
-      Get.snackbar('Error', 'Gagal ambil data profil: $e');
+      debugPrint("❌ Error saat mengambil profil: $e");
+      showErrorSnackbar(e.toString());
     } finally {
       isLoading.value = false;
+      update();
     }
   }
 
+  /// 🔴 Logout pengguna dan hapus data
   Future<void> logout() async {
     try {
-      final token = await storage.read('token');
+      debugPrint("🚪 Logging out...");
 
-      if (token == null || token.isEmpty) {
-        Get.offAllNamed('/login');
-        return;
-      }
+      // Hapus token & data profil
+      await box.erase();
+      Get.delete<ProfileController>(); // Hapus controller lama
+      Get.put(ProfileController()); // Buat ulang controller baru
 
-      final response = await http.post(
-        Uri.parse(BaseUrl.logout),
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({}),
-      );
+      profile.value = null; // Reset data user
+      update(); // Perbarui UI
 
-      if (response.statusCode == 200) {
-        Get.offAllNamed('/login');
-      } else {
-        String message = 'Logout gagal (${response.statusCode})';
-        try {
-          final error = json.decode(response.body);
-          if (error is Map && error['message'] != null) {
-            message = error['message'];
-          }
-        } catch (_) {}
-        Get.snackbar('Error', message);
-      }
+      // Pindah ke halaman login
+      Get.offAllNamed('/login');
     } catch (e) {
-      Get.snackbar('Error', 'Kesalahan saat logout: $e');
+      debugPrint("❌ Error saat logout: $e");
+      Get.snackbar(
+        "Error",
+        "Gagal logout: ${e.toString()}",
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
+  }
+
+  /// ⚠️ Menampilkan error sebagai snackbar
+  void showErrorSnackbar(String message) {
+    Get.snackbar(
+      'Error',
+      message.replaceAll('Exception:', '').trim(),
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.red,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+    );
   }
 }

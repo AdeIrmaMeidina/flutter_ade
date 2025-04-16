@@ -1,77 +1,65 @@
-import 'dart:convert';
-
-import 'package:flutter_ade/app/data/berita_response.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:flutter_ade/app/data/berita_response.dart';
+import 'package:flutter_ade/app/utils/api.dart';
+import 'package:flutter/foundation.dart';
+import 'package:get/get_connect/connect.dart';
 
 class BeritaController extends GetxController {
   var isLoading = false.obs;
-  var beritaList = <Berita>[].obs;
-
-  final connect = GetConnect(); // ✅ Reuse instance
+  var beritaList  = <Berita>[].obs;
 
   @override
   void onInit() {
     super.onInit();
-    fetchBerita();
+    fetchBerita(); // langsung panggil saat controller diinisialisasi
+  }
+
+  Future<String?> getToken() async {
+    final box = GetStorage();
+    return box.read('token');
   }
 
   Future<void> fetchBerita() async {
     try {
-      isLoading(true);
-      print("📡 Fetching berita...");
+      isLoading.value = true;
+      String? token = await getToken();
+     String fullUrl = '${BaseUrl.baseUrl}${BaseUrl.berita}'; // ganti sesuai endpoint yang benar
 
-      final token = GetStorage().read('access_token');
-      print('🔐 Access token: $token');
+      debugPrint("📡 Fetching: $fullUrl");
+      debugPrint("🔑 Token: $token");
 
-      if (token == null) {
-        print('❌ Token tidak ditemukan. Pastikan user sudah login.');
-        throw Exception('User belum login');
-      }
-
-      final response = await connect.get(
-        'http://10.10.11.77:8000/api/berita',
+     final response = await GetConnect().get(
+        fullUrl,
         headers: {
-          'Authorization': 'Bearer $token',
           'Accept': 'application/json',
-        },
-      ).timeout(
-        const Duration(seconds: 20),
-        onTimeout: () {
-          print(
-              "❌ Timeout: Server tidak merespon dalam waktu yang ditentukan.");
-          return Response(body: 'Timeout Error', statusCode: 408);
+          'Authorization': 'Bearer $token',
         },
       );
 
-      print('📦 Response status: ${response.statusCode}');
-      print('📦 Response body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        // Ensure the response is decoded into a map
-        Map<String, dynamic> body;
-        if (response.body is String) {
-          body = jsonDecode(response.body); // Decode if it's a String
-        } else {
-          body = response.body
-              as Map<String, dynamic>; // Otherwise, assume it's already a map
-        }
+      debugPrint("📦 Response status: ${response.statusCode}");
+      debugPrint("📦 Response body: ${response.body}");
 
-        final beritaResponse = BeritaResponse.fromJson(body);
-        beritaList.assignAll(beritaResponse.berita ?? []);
-        print('✅ ${beritaList.length} berita ditemukan');
-      } else if (response.statusCode == 401) {
-        print("❌ Token tidak valid / expired");
-        throw Exception('Akses tidak diizinkan. Silakan login ulang.');
-      } else {
-        throw Exception('Gagal memuat data berita');
+      if (response.statusCode == 401) {
+        Get.offAllNamed('/login');
+        return;
       }
+
+      if (response.body == null || response.body['berita'] == null) {
+        beritaList.clear();
+        debugPrint("⚠️ Tidak ada data berita.");
+        return;
+      }
+
+      final List<dynamic> data = response.body['berita'];
+      beritaList.assignAll(data.map((e) => Berita.fromJson(e)).toList());
+
+      debugPrint("✅ Jumlah berita: ${beritaList.length}");
     } catch (e) {
-      print('❌ Error saat ambil berita: $e');
-      Get.snackbar('Error', e.toString()); // Show error to the UI
+      debugPrint("❌ Error: $e");
     } finally {
-      isLoading(false);
-      print('✅ Selesai load');
+      isLoading.value = false;
     }
   }
 }
